@@ -46,19 +46,19 @@ import (
 )
 
 const (
-	AuthURLMLA = "https://auth.mercadolibre.com.ar" // Argentina
-	AuthURLMLB = "https://auth.mercadolivre.com.br" // Brasil
-	AuthURLMco = "https://auth.mercadolibre.com.co" // Colombia
-	AuthURLMcr = "https://auth.mercadolibre.com.cr" // Costa Rica
-	AuthURLMec = "https://auth.mercadolibre.com.ec" // Ecuador
-	AuthURLMlc = "https://auth.mercadolibre.cl"     // Chile
-	AuthURLMLM = "https://auth.mercadolibre.com.mx" // Mexico
-	AuthURLMlu = "https://auth.mercadolibre.com.uy" // Uruguay
-	AuthURLMlv = "https://auth.mercadolibre.com.ve" // Venezuela
-	AuthURLMpa = "https://auth.mercadolibre.com.pa" // Panama
-	AuthURLMpe = "https://auth.mercadolibre.com.pe" // Peru
-	AuthURLMpt = "https://auth.mercadolivre.pt"     // Portugal
-	AuthURLMrd = "https://auth.mercadolibre.com.do" // Dominicana
+	AuthURLMLA = "https://auth.mercadolibre.com.ar"        // Argentina
+	AuthURLMLB = "https://auth.mercadolivre.com.br"        // Brasil
+	AuthURLMco = "https://auth.mercadolibre.com.co"        // Colombia
+	AuthURLMcr = "https://auth.mercadolibre.com.cr"        // Costa Rica
+	AuthURLMec = "https://auth.mercadolibre.com.ec"        // Ecuador
+	AuthURLMlc = "https://auth.mercadolibre.cl"            // Chile
+	AuthURLMLM = "https://auth.mercadolibre.com.mx"        // Mexico
+	AuthURLMlu = "https://auth.mercadolibre.com.uy"        // Uruguay
+	AuthURLMlv = "https://auth.mercadolibre.com.ve"        // Venezuela
+	AuthURLMpa = "https://auth.mercadolibre.com.pa"        // Panama
+	AuthURLMpe = "https://auth.mercadolibre.com.pe"        // Peru
+	AuthURLMpt = "https://auth.mercadolivre.pt"            // Portugal
+	AuthURLMrd = "https://auth.mercadolibre.com.do"        // Dominicana
 	AuthURlCBT = "https://global-selling.mercadolibre.com" // CBT
 
 	AuthoricationCode = "authorization_code"
@@ -97,9 +97,11 @@ type MeliConfig struct {
 	CallBackURL    string
 	HTTPClient     HTTPClient
 	TokenRefresher TokenRefresher
+	Authorization  *Authorization
 }
 
-/*Meli function returns a Client which can be used to call mercadolibre API.
+/*
+Meli function returns a Client which can be used to call mercadolibre API.
 
 client id, code and secret are generated when registering your application by using Application Manager
 
@@ -125,31 +127,26 @@ func Meli(clientID int64, userCode string, secret string, callBackURL string) (*
 	return MeliClient(config)
 }
 
-/**
+/*
+*
 This function allows you to be more specific on the config you prefer giving to the sdk Client.
 In case you want to use your own HttpClient or your TokenRefresher policy, you can use the following.
 */
 func MeliClient(config MeliConfig) (*Client, error) {
-
-	//If userCode is not provided, then a generic client is returned.
-	//This client can be used only to access public API
+	// If userCode is not provided, then a generic client is returned.
 	if strings.Compare(config.UserCode, "") == 0 {
 		return publicClient, nil
 	}
 
-	//If we are here, userCode was provided, so a full client is going to be set up, to allow full access to either private
-	//and public API
 	clientByUserMutex.Lock()
 	defer clientByUserMutex.Unlock()
 
-	//The same client is going to be returned if the same applicationId and userCode is provided.
 	key := strconv.FormatInt(config.ClientID, 10) + config.UserCode
 
 	var client *Client
 	client = clientByUser[key]
 
 	if client == nil {
-
 		client = &Client{
 			id:             config.ClientID,
 			code:           config.UserCode,
@@ -164,23 +161,29 @@ func MeliClient(config MeliConfig) (*Client, error) {
 			log.Printf("Building a client: %p for clientid:%d code:%s\n", client, config.ClientID, config.UserCode)
 		}
 
-		auth, err := client.authorize()
-
-		if err != nil {
-			if debugEnable {
-				log.Printf("error: %s", err.Error())
+		// If an existing authorization is provided, use it
+		if config.Authorization != nil {
+			client.auth = *config.Authorization
+		} else {
+			// Otherwise, generate a new token
+			auth, err := client.authorize()
+			if err != nil {
+				if debugEnable {
+					log.Printf("error: %s", err.Error())
+				}
+				return nil, err
 			}
-			return nil, err
+			client.auth = *auth
 		}
 
 		clientByUser[key] = client
-		client.auth = *auth
 	}
 
 	return client, nil
 }
 
-/**
+/*
+*
 HTTP Methods
 Given that error handling for all the HTTP Methods is pretty the same, then an interface Callback is define, which is
 going to be called by the handler to execute the different HTTP Methods, then check the response and handle the error
@@ -264,7 +267,15 @@ type Client struct {
 This method returns an Authorization object which contains the needed tokens
 to interact with ML API
 */
+
 func (client *Client) authorize() (*Authorization, error) {
+	// If we already have a valid token, skip reauthorization
+	if !client.auth.isExpired() && client.auth.ReceivedAt > 0 {
+		if debugEnable {
+			log.Printf("Using existing access token.")
+		}
+		return &client.auth, nil
+	}
 
 	authURL := newAuthorizationURL(client.apiURL + "/oauth/token")
 	authURL.addGrantType(AuthoricationCode)
@@ -286,13 +297,13 @@ func (client *Client) authorize() (*Authorization, error) {
 	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New(fmt.Sprintf("Ups, there was an error: %s", body))
+		return nil, errors.New(fmt.Sprintf("Error: %s", body))
 	}
 
 	authorization := new(Authorization)
 	if err := json.Unmarshal(body, authorization); err != nil {
 		if debugEnable {
-			log.Printf("Error while receiving the authorization %s %s", err.Error(), body)
+			log.Printf("Error while receiving the authorization: %s %s", err.Error(), body)
 		}
 		return nil, err
 	}
@@ -379,7 +390,7 @@ func (auth Authorization) isExpired() bool {
 	if debugEnable {
 		log.Printf("received at:%d expires in: %d\n", auth.ReceivedAt, auth.ExpiresIn)
 	}
-	return ((auth.ReceivedAt + int64(auth.ExpiresIn)) <= (time.Now().Unix() + 60))
+	return ((auth.ReceivedAt + int64(auth.ExpiresIn)) <= (time.Now().Unix() + 60)) && auth.ReceivedAt > 0 && auth.ExpiresIn > 0
 }
 
 /*
@@ -443,7 +454,8 @@ func newAuthorizationURL(baseURL string) *AuthorizationURL {
 	return authURL
 }
 
-/**
+/*
+*
 This interface allows you to change or mock the way Meli client make HTTP Requests.
 */
 type HTTPClient interface {
@@ -504,14 +516,16 @@ type TokenRefresher interface {
 	RefreshToken(*Client) error
 }
 
-/**MeliTokenRefresher implements ToeknRefresher interface.
+/*
+*MeliTokenRefresher implements ToeknRefresher interface.
 This type is the default implementation provided by the SDK to deal with
 Oauth token handling.
 */
 type MeliTokenRefresher struct {
 }
 
-/**RefreshToken is a method which has side effects. This one, alters the token that is within the client.
+/*
+*RefreshToken is a method which has side effects. This one, alters the token that is within the client.
 Every time this method is called some locking mechanism has to be used to avoid concurrency problems when client param is modified.
 */
 func (refresher MeliTokenRefresher) RefreshToken(client *Client) error {

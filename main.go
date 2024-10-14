@@ -37,7 +37,7 @@ const (
 
 var userCode map[string]string
 
-//var userForbidden map[string]string
+// var userForbidden map[string]string
 var userCodeMutex sync.Mutex
 
 /*This Application is just an example about how to use the golang meli sdk to interact with MELI API*/
@@ -274,7 +274,8 @@ func addresses(w http.ResponseWriter, r *http.Request) {
 	printOutput(w, response)
 }
 
-/**
+/*
+*
 This method returns the code for a specific user if it was previously sent.
 */
 func getUserCode(r *http.Request) string {
