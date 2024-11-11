@@ -134,7 +134,7 @@ In case you want to use your own HttpClient or your TokenRefresher policy, you c
 */
 func MeliClient(config MeliConfig) (*Client, error) {
 	// If userCode is not provided, then a generic client is returned.
-	if strings.Compare(config.UserCode, "") == 0 {
+	if strings.Compare(config.UserCode, "") == 0 && config.Authorization == nil {
 		return publicClient, nil
 	}
 
