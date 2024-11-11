@@ -72,7 +72,7 @@ var clientByUserMutex sync.Mutex
 var anonymous = Authorization{}
 var authMutex = &sync.Mutex{}
 
-var debugEnable = false //Set this true if you want to see debug messages
+var debugEnable = true //Set this true if you want to see debug messages
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -310,6 +310,10 @@ func (client *Client) authorize() (*Authorization, error) {
 
 	authorization.ReceivedAt = time.Now().Unix()
 	return authorization, nil
+}
+
+func (client *Client) GetAuth() Authorization {
+	return client.auth
 }
 
 func (client *Client) refreshToken() error {
