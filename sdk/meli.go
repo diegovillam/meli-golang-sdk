@@ -316,6 +316,10 @@ func (client *Client) GetAuth() Authorization {
 	return client.auth
 }
 
+func (client *Client) RefreshToken() error {
+	return client.refreshToken()
+}
+
 func (client *Client) refreshToken() error {
 	return client.tokenRefresher.RefreshToken(client)
 }
