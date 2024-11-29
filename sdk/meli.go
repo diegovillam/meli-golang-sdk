@@ -35,7 +35,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -293,7 +292,7 @@ func (client *Client) authorize() (*Authorization, error) {
 		return nil, err
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -555,10 +554,11 @@ func (refresher MeliTokenRefresher) RefreshToken(client *Client) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("Refreshing token returned status code " + resp.Status)
+		bb, _ := io.ReadAll(resp.Body)
+		return errors.New("Refreshing token returned status code " + resp.Status + " body " + string(bb))
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 
 	if err := json.Unmarshal(body, &(client.auth)); err != nil {
